@@ -4,7 +4,7 @@ import requests
 import requests_mock
 
 from amazon_dash.confirmations import get_confirmation, DisabledConfirmation, get_confirmation_instance, \
-    TelegramConfirmation, ConfirmationBase
+    NexmoConfirmation, TelegramConfirmation, ConfirmationBase
 from amazon_dash.exceptions import InvalidConfig, ConfirmationError
 
 
@@ -71,3 +71,37 @@ class TestTelegramConfirmation(unittest.TestCase):
             m.post(telegram.url_base.format('foo'), exc=requests.exceptions.ConnectTimeout)
             with self.assertRaises(ConfirmationError):
                 telegram.send('spam')
+
+
+class TestNexmoConfirmation(unittest.TestCase):
+    def get_nexmo(self):
+        return NexmoConfirmation({'api_key': 'key', 'api_secret': 'secret',
+            'from': 'me', 'to': 'you'})
+
+    def test_send(self):
+        nexmo = self.get_nexmo()
+        with requests_mock.mock() as m:
+            m.post(nexmo.url_base.format('key', 'secret', 'you'), text='{"ok": true}')
+            nexmo.send('spam')
+            self.assertTrue(m.called_once)
+
+    def test_invalid_json(self):
+        nexmo = self.get_nexmo()
+        with requests_mock.mock() as m:
+            m.post(nexmo.url_base.format('key', 'secret', 'you'), text='{"}invalid')
+            with self.assertRaises(ConfirmationError):
+                nexmo.send('spam')
+
+    def test_send_error(self):
+        nexmo = self.get_nexmo()
+        with requests_mock.mock() as m:
+            m.post(nexmo.url_base.format('key', 'secret', 'you'), text='{"ok": false}')
+            with self.assertRaises(ConfirmationError):
+                nexmo.send('spam')
+
+    def test_server_error(self):
+        nexmo = self.get_nexmo()
+        with requests_mock.mock() as m:
+            m.post(nexmo.url_base.format('key', 'secret', 'you'), exc=requests.exceptions.ConnectTimeout)
+            with self.assertRaises(ConfirmationError):
+                nexmo.send('spam')
